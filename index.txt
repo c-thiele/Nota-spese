@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Note spese</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2b2b2b">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:12px;max-width:900px;color:#222;background:#f6f6f4}
+h2{font-size:17px;margin:0 0 10px}
+.card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:14px;margin-bottom:12px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+label{display:block;font-size:12px;color:#666;margin-bottom:3px}
+input,select{width:100%;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff}
+button{font-size:15px;padding:8px 14px;border:1px solid #bbb;border-radius:8px;background:#fff;cursor:pointer}
+button.p{background:#2b2b2b;color:#fff;border-color:#2b2b2b}
+button:disabled{opacity:.5}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 4px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap}
+th{color:#666;font-weight:500}
+.n{text-align:right}
+.err{color:#b00020;font-size:13px;min-height:18px;margin:6px 0}
+.tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+.tot div{background:#ecece8;border-radius:8px;padding:10px;font-size:12px;color:#666}
+.tot b{display:block;font-size:18px;color:#222;font-weight:600}
+summary{cursor:pointer;font-weight:600}
+.hide{display:none}
+</style>
+</head>
+<body>
+
+<div id="vLogin" class="card hide">
+  <h2>Accedi</h2>
+  <div class="g">
+    <div><label>Email</label><input id="lEmail" type="email" autocomplete="username"></div>
+    <div><label>Password</label><input id="lPwd" type="password" autocomplete="current-password"></div>
+  </div>
+  <p class="err" id="lErr"></p>
+  <button class="p" id="btnLogin">Accedi</button>
+</div>
+
+<div id="vApp" class="hide">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <div style="width:200px"><label>Mese</label><input id="mese" type="month"></div>
+    <button id="btnLogout">Esci</button>
+  </div>
+
+  <details class="card">
+    <summary>Intestazione e tariffe</summary>
+    <div class="g" style="margin-top:10px">
+      <div><label>Nome e cognome</label><input id="p_nome"></div>
+      <div><label>Data di nascita</label><input id="p_data_nascita" type="date"></div>
+      <div><label>Luogo di nascita</label><input id="p_luogo_nascita"></div>
+      <div><label>Residenza</label><input id="p_residenza"></div>
+      <div><label>Codice fiscale</label><input id="p_codice_fiscale"></div>
+      <div><label>Auto 1 (modello e targa)</label><input id="p_auto1"></div>
+      <div><label>Auto 2 (modello e targa)</label><input id="p_auto2"></div>
+      <div><label>Indennità trasferta (€)</label><input id="p_tariffa_trasferta" type="number" step="0.01"></div>
+      <div><label>Rimborso km (€/km)</label><input id="p_tariffa_km" type="number" step="0.001"></div>
+    </div>
+    <div style="margin-top:10px"><label>Destinatario</label><input id="p_destinatario"></div>
+    <p class="err" id="pErr"></p>
+    <button id="btnProf">Salva intestazione</button>
+  </details>
+
+  <div class="card">
+    <h2 id="fTitolo">Aggiungi viaggio</h2>
+    <div class="g">
+      <div><label>Data</label><input id="f_data" type="date"></div>
+      <div><label>Cliente</label><input id="f_cli"></div>
+      <div><label>Comune</label><input id="f_com"></div>
+      <div><label>Provincia</label><input id="f_prov" maxlength="2" style="text-transform:uppercase"></div>
+      <div><label>Auto</label><select id="f_auto"><option value="1">Auto 1</option><option value="2">Auto 2</option></select></div>
+      <div><label>Km</label><input id="f_km" type="number" min="0" step="1" inputmode="decimal"></div>
+      <div><label>Pranzo (€)</label><input id="f_pr" type="number" min="0" step="0.01" inputmode="decimal"></div>
+      <div><label>Telepass (€)</label><input id="f_tp" type="number" min="0" step="0.01" inputmode="decimal"></div>
+      <div><label>Altre spese (€)</label><input id="f_al" type="number" min="0" step="0.01" inputmode="decimal"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding-top:18px">
+        <input id="f_tras" type="checkbox" style="width:22px;height:22px"><label for="f_tras" style="margin:0;font-size:15px;color:#222">È una trasferta</label>
+      </div>
+    </div>
+    <p class="err" id="fErr"></p>
+    <div class="row">
+      <button class="p" id="btnAdd">Aggiungi</button>
+      <button id="btnAnnulla" class="hide">Annulla modifica</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Viaggi del mese</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>N° tr.</th><th>Data</th><th>Cliente</th><th>Destinazione</th><th>Auto</th><th class="n">Km</th><th class="n">Pranzo</th><th class="n">Telepass</th><th class="n">Altre</th><th></th></tr></thead>
+      <tbody id="righe"></tbody>
+    </table></div>
+    <p id="vuoto" style="font-size:13px;color:#666">Nessun viaggio in questo mese.</p>
+    <p class="err" id="stato"></p>
+  </div>
+
+  <div class="tot">
+    <div>Trasferte<b id="s_tr">–</b></div>
+    <div>Rimborso km<b id="s_km">–</b></div>
+    <div>Spese varie<b id="s_sp">–</b></div>
+    <div>Totale<b id="s_tot">–</b></div>
+  </div>
+  <button class="p" id="btnPdf">Genera PDF</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>
+const SUPABASE_URL = 'https://utrbijlqyqasmdhcazvw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_NnNZ1I_6IhJPDFm8_LXemA_D3MykpKQ';
+const DEST = 'Progetto Impresa srl, Piazza del Borgo Vecchio 20, 36030 San Vito di Leguzzano (VI)';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = id => document.getElementById(id);
+const PF = ['nome','data_nascita','luogo_nascita','residenza','codice_fiscale','auto1','auto2','tariffa_trasferta','tariffa_km','destinatario'];
+const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+let V = [], editId = null, uid = null;
+
+const num = x => parseFloat(x) || 0;
+const eur = n => '€ ' + num(n).toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2});
+const dIt = s => s ? s.split('-').reverse().join('/') : '';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const oggi = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+
+function mostra(loggato) {
+  $('vLogin').classList.toggle('hide', loggato);
+  $('vApp').classList.toggle('hide', !loggato);
+}
+
+async function avvia() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { mostra(false); return; }
+  uid = session.user.id;
+  mostra(true);
+  if (!$('mese').value) $('mese').value = oggi().slice(0, 7);
+  resetForm();
+  await caricaProfilo();
+  await caricaViaggi();
+}
+
+$('btnLogin').onclick = async () => {
+  $('lErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email: $('lEmail').value.trim(), password: $('lPwd').value });
+  if (error) { $('lErr').textContent = 'Accesso non riuscito: controlla email e password.'; return; }
+  avvia();
+};
+
+$('btnLogout').onclick = async () => { await sb.auth.signOut(); V = []; uid = null; mostra(false); };
+
+async function caricaProfilo() {
+  const { data, error } = await sb.from('profilo').select('*').maybeSingle();
+  if (error) { $('pErr').textContent = 'Errore nel caricamento: ' + error.message; return; }
+  const d = data || { tariffa_trasferta: 15, tariffa_km: 0.40, destinatario: DEST };
+  PF.forEach(k => $('p_' + k).value = d[k] ?? '');
+  if (!$('p_destinatario').value) $('p_destinatario').value = DEST;
+}
+
+$('btnProf').onclick = async () => {
+  const r = { user_id: uid };
+  PF.forEach(k => r[k] = $('p_' + k).value.trim() || null);
+  r.tariffa_trasferta = num($('p_tariffa_trasferta').value);
+  r.tariffa_km = num($('p_tariffa_km').value);
+  const { error } = await sb.from('profilo').upsert(r);
+  $('pErr').textContent = error ? 'Salvataggio non riuscito: ' + error.message : 'Intestazione salvata.';
+  render();
+};
+
+async function caricaViaggi() {
+  const m = $('mese').value;
+  if (!m) return;
+  const [y, mo] = m.split('-').map(Number);
+  const fine = m + '-' + String(new Date(y, mo, 0).getDate()).padStart(2, '0');
+  const { data, error } = await sb.from('viaggi').select('*')
+    .gte('data', m + '-01').lte('data', fine).order('data').order('id');
+  if (error) { $('stato').textContent = 'Errore di caricamento: ' + error.message; return; }
+  $('stato').textContent = '';
+  V = data;
+  render();
+}
+$('mese').onchange = caricaViaggi;
+
+function numerati() { let c = 0; return V.map(v => ({ ...v, nt: v.trasferta ? ++c : '' })); }
+
+function totali() {
+  const s = k => V.reduce((a, v) => a + num(v[k]), 0);
+  const nT = V.filter(v => v.trasferta).length, km = s('km'), pr = s('pranzo'), tp = s('telepass'), al = s('altre');
+  const eT = nT * num($('p_tariffa_trasferta').value), eK = km * num($('p_tariffa_km').value);
+  return { nT, km, pr, tp, al, eT, eK, sp: pr + tp + al, tot: eT + eK + pr + tp + al };
+}
+
+function render() {
+  $('righe').innerHTML = numerati().map(v => `<tr>
+    <td>${v.nt}</td><td>${dIt(v.data)}</td><td>${esc(v.cliente)}</td>
+    <td>${esc(v.comune)}${v.provincia ? ' (' + esc(v.provincia) + ')' : ''}</td><td>${v.auto}</td>
+    <td class="n">${Math.round(num(v.km))}</td><td class="n">${eur(v.pranzo)}</td>
+    <td class="n">${eur(v.telepass)}</td><td class="n">${eur(v.altre)}</td>
+    <td><button onclick="modifica(${v.id})">Modifica</button> <button onclick="elimina(${v.id})">Elimina</button></td>
+  </tr>`).join('');
+  $('vuoto').style.display = V.length ? 'none' : 'block';
+  const t = totali();
+  $('s_tr').textContent = t.nT + ' · ' + eur(t.eT);
+  $('s_km').textContent = Math.round(t.km) + ' km · ' + eur(t.eK);
+  $('s_sp').textContent = eur(t.sp);
+  $('s_tot').textContent = eur(t.tot);
+}
+
+function resetForm() {
+  editId = null;
+  $('f_data').value = oggi();
+  ['f_cli','f_com','f_prov'].forEach(k => $(k).value = '');
+  ['f_km','f_pr','f_tp','f_al'].forEach(k => $(k).value = '');
+  $('f_auto').value = '1';
+  $('f_tras').checked = false;
+  $('fTitolo').textContent = 'Aggiungi viaggio';
+  $('btnAdd').textContent = 'Aggiungi';
+  $('btnAnnulla').classList.add('hide');
+  $('fErr').textContent = '';
+}
+$('btnAnnulla').onclick = resetForm;
+
+$('btnAdd').onclick = async () => {
+  const v = {
+    data: $('f_data').value, cliente: $('f_cli').value.trim(), comune: $('f_com').value.trim(),
+    provincia: $('f_prov').value.trim().toUpperCase() || null, auto: +$('f_auto').value,
+    km: num($('f_km').value), pranzo: num($('f_pr').value), telepass: num($('f_tp').value),
+    altre: num($('f_al').value), trasferta: $('f_tras').checked
+  };
+  if (!v.data || !v.cliente || !v.comune) { $('fErr').textContent = 'Inserisci almeno data, cliente e comune.'; return; }
+  if ([v.km, v.pranzo, v.telepass, v.altre].some(x => x < 0)) { $('fErr').textContent = 'Km e importi non possono essere negativi.'; return; }
+  $('btnAdd').disabled = true;
+  const { error } = editId
+    ? await sb.from('viaggi').update(v).eq('id', editId)
+    : await sb.from('viaggi').insert(v);
+  $('btnAdd').disabled = false;
+  if (error) { $('fErr').textContent = 'Salvataggio non riuscito: ' + error.message; return; }
+  if (v.data.slice(0, 7) !== $('mese').value) $('mese').value = v.data.slice(0, 7);
+  resetForm();
+  caricaViaggi();
+};
+
+window.modifica = id => {
+  const v = V.find(x => x.id === id); if (!v) return;
+  editId = id;
+  $('f_data').value = v.data; $('f_cli').value = v.cliente; $('f_com').value = v.comune;
+  $('f_prov').value = v.provincia || ''; $('f_auto').value = String(v.auto);
+  $('f_km').value = v.km; $('f_pr').value = v.pranzo; $('f_tp').value = v.telepass; $('f_al').value = v.altre;
+  $('f_tras').checked = v.trasferta;
+  $('fTitolo').textContent = 'Modifica viaggio';
+  $('btnAdd').textContent = 'Salva modifica';
+  $('btnAnnulla').classList.remove('hide');
+  $('fTitolo').scrollIntoView({ behavior: 'smooth' });
+};
+
+window.elimina = async id => {
+  if (!confirm('Eliminare questo viaggio?')) return;
+  const { error } = await sb.from('viaggi').delete().eq('id', id);
+  if (error) { $('stato').textContent = 'Eliminazione non riuscita: ' + error.message; return; }
+  if (editId === id) resetForm();
+  caricaViaggi();
+};
+
+$('btnPdf').onclick = () => {
+  if (!V.length) { $('stato').textContent = 'Nessun viaggio da stampare in questo mese.'; return; }
+  const { jsPDF } = window.jspdf;
+  const d = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const m = $('mese').value, ml = MESI[+m.split('-')[1] - 1] + ' ' + m.split('-')[0];
+  const a1 = $('p_auto1').value || 'Auto 1', a2 = $('p_auto2').value || 'Auto 2';
+  d.setFontSize(10);
+  let y = 15;
+  [['Nome e cognome', $('p_nome').value], ['Data di nascita', dIt($('p_data_nascita').value)],
+   ['Luogo di nascita', $('p_luogo_nascita').value], ['Residenza', $('p_residenza').value],
+   ['Codice fiscale', $('p_codice_fiscale').value], ['Auto 1', $('p_auto1').value], ['Auto 2', $('p_auto2').value]]
+  .forEach(([k, v]) => { d.setFont(undefined, 'bold'); d.text(k + ':', 14, y); d.setFont(undefined, 'normal'); d.text(v || '', 52, y); y += 5.5; });
+  d.setFont(undefined, 'bold'); d.text('Spett.', 190, 15);
+  d.setFont(undefined, 'normal'); d.text(d.splitTextToSize($('p_destinatario').value, 90), 190, 20.5);
+  d.setFontSize(14); d.setFont(undefined, 'bold');
+  d.text('Missioni mese di ' + ml, 148.5, y + 5, { align: 'center' });
+  d.setFont(undefined, 'normal');
+  const t = totali();
+  const stile = { styles: { fontSize: 9 }, headStyles: { fillColor: [60,60,60] }, footStyles: { fillColor: [230,230,230], textColor: 20 } };
+  d.autoTable({ ...stile, startY: y + 10,
+    head: [['N° tr.','Data','Cliente','Destinazione','Auto','Km','Pranzo','Telepass','Altre spese']],
+    body: numerati().map(v => [v.nt, dIt(v.data), v.cliente, v.comune + (v.provincia ? ' (' + v.provincia + ')' : ''),
+      v.auto === 2 ? a2 : a1, Math.round(num(v.km)), eur(v.pranzo), eur(v.telepass), eur(v.altre)]),
+    foot: [['','','','','Totale', Math.round(t.km), eur(t.pr), eur(t.tp), eur(t.al)]],
+    showFoot: 'lastPage',
+    columnStyles: { 5: {halign:'right'}, 6: {halign:'right'}, 7: {halign:'right'}, 8: {halign:'right'} } });
+  d.autoTable({ ...stile, startY: d.lastAutoTable.finalY + 8, margin: { left: 160 }, tableWidth: 123,
+    head: [['Voce','Quantità','Tariffa','Totale']],
+    body: [['Trasferte', t.nT, eur($('p_tariffa_trasferta').value), eur(t.eT)],
+           ['Rimborso km', Math.round(t.km), eur($('p_tariffa_km').value) + '/km', eur(t.eK)],
+           ['Spese varie', '', '', eur(t.sp)]],
+    foot: [['Totale da rimborsare', '', '', eur(t.tot)]],
+    columnStyles: { 1: {halign:'right'}, 2: {halign:'right'}, 3: {halign:'right'} } });
+  const fy = d.lastAutoTable.finalY + 15;
+  d.setFontSize(10);
+  d.text('Data ____________________', 14, fy);
+  d.text('Firma ____________________', 14, fy + 10);
+  d.save('note_spese_' + m + '.pdf');
+};
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden && uid) caricaViaggi(); });
+avvia();
+</script>
+</body>
+</html>
