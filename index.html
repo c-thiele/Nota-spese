@@ -32,6 +32,13 @@ th{color:#666;font-weight:500}
 .tot b{display:block;font-size:18px;color:#222;font-weight:600}
 summary{cursor:pointer;font-weight:600}
 .hide{display:none}
+.prev{background:#fff;border:1px solid #ccc;border-radius:4px;padding:24px;margin:12px 0;font-size:12px;color:#222;min-width:760px}
+.prev table{font-size:11px}
+.prev th{background:#3c3c3c;color:#fff;padding:6px}
+.prev tfoot td{background:#e6e6e6;font-weight:600}
+.prev .testa{display:flex;justify-content:space-between;gap:16px}
+.prev h3{text-align:center;font-size:16px;margin:18px 0 10px}
+.prev table.riep{width:auto;margin:16px 0 0 auto}
 </style>
 </head>
 <body>
@@ -116,7 +123,15 @@ summary{cursor:pointer;font-weight:600}
     <div>Spese varie<b id="s_sp">–</b></div>
     <div>Totale<b id="s_tot">–</b></div>
   </div>
-  <button class="p" id="btnPdf">Genera PDF</button>
+
+  <button class="p" id="btnPrev">Anteprima di stampa</button>
+  <div id="anteprima" class="hide">
+    <div class="scroll"><div class="prev" id="prevBody"></div></div>
+    <div class="row" style="margin-bottom:24px">
+      <button class="p" id="btnPdf">Scarica PDF</button>
+      <button id="btnChiudi">Chiudi anteprima</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -139,6 +154,7 @@ const eur = n => '€ ' + num(n).toLocaleString('it-IT', {minimumFractionDigits:
 const dIt = s => s ? s.split('-').reverse().join('/') : '';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const oggi = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const meseLungo = m => MESI[+m.split('-')[1] - 1] + ' ' + m.split('-')[0];
 
 function mostra(loggato) {
   $('vLogin').classList.toggle('hide', loggato);
@@ -163,7 +179,7 @@ $('btnLogin').onclick = async () => {
   avvia();
 };
 
-$('btnLogout').onclick = async () => { await sb.auth.signOut(); V = []; uid = null; mostra(false); };
+$('btnLogout').onclick = async () => { await sb.auth.signOut(); V = []; uid = null; chiudiAnteprima(); mostra(false); };
 
 async function caricaProfilo() {
   const { data, error } = await sb.from('profilo').select('*').maybeSingle();
@@ -230,6 +246,7 @@ function render() {
   $('s_km').textContent = Math.round(t.km) + ' km · ' + eur(t.eK);
   $('s_sp').textContent = eur(t.sp);
   $('s_tot').textContent = eur(t.tot);
+  if (!$('anteprima').classList.contains('hide')) anteprima();
 }
 
 function svuotaCliente() {
@@ -305,11 +322,62 @@ window.elimina = async id => {
   caricaViaggi();
 };
 
+function anteprima() {
+  if (!V.length) { chiudiAnteprima(); $('stato').textContent = 'Nessun viaggio da mostrare in questo mese.'; return; }
+  const a1 = $('p_auto1').value || 'Auto 1', a2 = $('p_auto2').value || 'Auto 2';
+  const t = totali(), piva = $('p_destinatario_piva').value;
+  const dato = (k, v) => `<div><b>${k}:</b> ${esc(v)}</div>`;
+  $('prevBody').innerHTML = `
+    <div class="testa">
+      <div>
+        ${dato('Nome e cognome', $('p_nome').value)}
+        ${dato('Data di nascita', dIt($('p_data_nascita').value))}
+        ${dato('Luogo di nascita', $('p_luogo_nascita').value)}
+        ${dato('Residenza', $('p_residenza').value)}
+        ${dato('Codice fiscale', $('p_codice_fiscale').value)}
+        ${dato('Auto 1', $('p_auto1').value)}
+        ${dato('Auto 2', $('p_auto2').value)}
+      </div>
+      <div style="max-width:300px"><b>Spett.</b><br>${esc($('p_destinatario').value)}${piva ? '<br>P.I. / C.F. ' + esc(piva) : ''}</div>
+    </div>
+    <h3>Missioni mese di ${meseLungo($('mese').value)}</h3>
+    <table>
+      <thead><tr><th>N° tr.</th><th>Data</th><th>Cliente</th><th>Destinazione</th><th>Auto</th><th class="n">Km</th><th class="n">Pranzo</th><th class="n">Telepass</th><th class="n">Altre spese</th></tr></thead>
+      <tbody>${numerati().map(v => `<tr class="${v.primo ? 'primo' : ''}">
+        <td>${v.nt}</td><td>${dIt(v.data)}</td><td>${esc(v.cliente)}</td>
+        <td>${esc(v.comune)}${v.provincia ? ' (' + esc(v.provincia) + ')' : ''}</td>
+        <td>${esc(v.auto === 2 ? a2 : a1)}</td><td class="n">${Math.round(num(v.km))}</td>
+        <td class="n">${eur(v.pranzo)}</td><td class="n">${eur(v.telepass)}</td><td class="n">${eur(v.altre)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="5" class="n">Totale</td><td class="n">${Math.round(t.km)}</td><td class="n">${eur(t.pr)}</td><td class="n">${eur(t.tp)}</td><td class="n">${eur(t.al)}</td></tr></tfoot>
+    </table>
+    <table class="riep">
+      <thead><tr><th>Voce</th><th class="n">Quantità</th><th class="n">Tariffa</th><th class="n">Totale</th></tr></thead>
+      <tbody>
+        <tr><td>Trasferte (giornate)</td><td class="n">${t.nT}</td><td class="n">${eur($('p_tariffa_trasferta').value)}</td><td class="n">${eur(t.eT)}</td></tr>
+        <tr><td>Rimborso km</td><td class="n">${Math.round(t.km)}</td><td class="n">${eur($('p_tariffa_km').value)}/km</td><td class="n">${eur(t.eK)}</td></tr>
+        <tr><td>Spese varie</td><td></td><td></td><td class="n">${eur(t.sp)}</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="3">Totale da rimborsare</td><td class="n">${eur(t.tot)}</td></tr></tfoot>
+    </table>
+    <p style="margin-top:28px">Data ____________________</p>
+    <p>Firma ____________________</p>`;
+  $('anteprima').classList.remove('hide');
+  $('btnPrev').classList.add('hide');
+}
+
+function chiudiAnteprima() {
+  $('anteprima').classList.add('hide');
+  $('btnPrev').classList.remove('hide');
+}
+
+$('btnPrev').onclick = () => { anteprima(); $('anteprima').scrollIntoView({ behavior: 'smooth' }); };
+$('btnChiudi').onclick = chiudiAnteprima;
+
 $('btnPdf').onclick = () => {
   if (!V.length) { $('stato').textContent = 'Nessun viaggio da stampare in questo mese.'; return; }
   const { jsPDF } = window.jspdf;
   const d = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const m = $('mese').value, ml = MESI[+m.split('-')[1] - 1] + ' ' + m.split('-')[0];
+  const m = $('mese').value;
   const a1 = $('p_auto1').value || 'Auto 1', a2 = $('p_auto2').value || 'Auto 2';
   d.setFontSize(10);
   let y = 15;
@@ -323,7 +391,7 @@ $('btnPdf').onclick = () => {
   d.text(righeDest, 190, 20.5);
   if ($('p_destinatario_piva').value) d.text('P.I. / C.F. ' + $('p_destinatario_piva').value, 190, 20.5 + righeDest.length * 5);
   d.setFontSize(14); d.setFont(undefined, 'bold');
-  d.text('Missioni mese di ' + ml, 148.5, y + 5, { align: 'center' });
+  d.text('Missioni mese di ' + meseLungo(m), 148.5, y + 5, { align: 'center' });
   d.setFont(undefined, 'normal');
   const t = totali();
   const stile = { styles: { fontSize: 9 }, headStyles: { fillColor: [60,60,60] }, footStyles: { fillColor: [230,230,230], textColor: 20 } };
