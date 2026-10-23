@@ -22,9 +22,11 @@ button:disabled{opacity:.5}
 .scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{padding:6px 4px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap}
+tr.primo td{border-top:2px solid #bbb}
 th{color:#666;font-weight:500}
 .n{text-align:right}
 .err{color:#b00020;font-size:13px;min-height:18px;margin:6px 0}
+.hint{font-size:12px;color:#666;margin:2px 0 0}
 .tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
 .tot div{background:#ecece8;border-radius:8px;padding:10px;font-size:12px;color:#666}
 .tot b{display:block;font-size:18px;color:#222;font-weight:600}
@@ -63,13 +65,16 @@ summary{cursor:pointer;font-weight:600}
       <div><label>Indennità trasferta (€)</label><input id="p_tariffa_trasferta" type="number" step="0.01"></div>
       <div><label>Rimborso km (€/km)</label><input id="p_tariffa_km" type="number" step="0.001"></div>
     </div>
-    <div style="margin-top:10px"><label>Destinatario</label><input id="p_destinatario"></div>
+    <div class="g" style="margin-top:10px;grid-template-columns:minmax(0,3fr) minmax(0,1fr)">
+      <div><label>Destinatario</label><input id="p_destinatario"></div>
+      <div><label>P.I. / C.F. destinatario</label><input id="p_destinatario_piva"></div>
+    </div>
     <p class="err" id="pErr"></p>
     <button id="btnProf">Salva intestazione</button>
   </details>
 
   <div class="card">
-    <h2 id="fTitolo">Aggiungi viaggio</h2>
+    <h2 id="fTitolo">Aggiungi cliente visitato</h2>
     <div class="g">
       <div><label>Data</label><input id="f_data" type="date"></div>
       <div><label>Cliente</label><input id="f_cli"></div>
@@ -80,13 +85,17 @@ summary{cursor:pointer;font-weight:600}
       <div><label>Pranzo (€)</label><input id="f_pr" type="number" min="0" step="0.01" inputmode="decimal"></div>
       <div><label>Telepass (€)</label><input id="f_tp" type="number" min="0" step="0.01" inputmode="decimal"></div>
       <div><label>Altre spese (€)</label><input id="f_al" type="number" min="0" step="0.01" inputmode="decimal"></div>
-      <div style="display:flex;align-items:center;gap:8px;padding-top:18px">
-        <input id="f_tras" type="checkbox" style="width:22px;height:22px"><label for="f_tras" style="margin:0;font-size:15px;color:#222">È una trasferta</label>
+      <div style="padding-top:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="f_tras" type="checkbox" style="width:22px;height:22px"><label for="f_tras" style="margin:0;font-size:15px;color:#222">È una trasferta</label>
+        </div>
+        <p class="hint">Vale per tutta la giornata</p>
       </div>
     </div>
     <p class="err" id="fErr"></p>
     <div class="row">
-      <button class="p" id="btnAdd">Aggiungi</button>
+      <button class="p" id="btnAdd">Salva</button>
+      <button id="btnAltro">Salva e aggiungi altro cliente</button>
       <button id="btnAnnulla" class="hide">Annulla modifica</button>
     </div>
   </div>
@@ -117,10 +126,11 @@ summary{cursor:pointer;font-weight:600}
 const SUPABASE_URL = 'https://utrbijlqyqasmdhcazvw.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_NnNZ1I_6IhJPDFm8_LXemA_D3MykpKQ';
 const DEST = 'Progetto Impresa srl, Piazza del Borgo Vecchio 20, 36030 San Vito di Leguzzano (VI)';
+const PIVA = '03701180246';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = id => document.getElementById(id);
-const PF = ['nome','data_nascita','luogo_nascita','residenza','codice_fiscale','auto1','auto2','tariffa_trasferta','tariffa_km','destinatario'];
+const PF = ['nome','data_nascita','luogo_nascita','residenza','codice_fiscale','auto1','auto2','tariffa_trasferta','tariffa_km','destinatario','destinatario_piva'];
 const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
 let V = [], editId = null, uid = null;
 
@@ -158,9 +168,10 @@ $('btnLogout').onclick = async () => { await sb.auth.signOut(); V = []; uid = nu
 async function caricaProfilo() {
   const { data, error } = await sb.from('profilo').select('*').maybeSingle();
   if (error) { $('pErr').textContent = 'Errore nel caricamento: ' + error.message; return; }
-  const d = data || { tariffa_trasferta: 15, tariffa_km: 0.40, destinatario: DEST };
+  const d = data || { tariffa_trasferta: 15, tariffa_km: 0.40 };
   PF.forEach(k => $('p_' + k).value = d[k] ?? '');
   if (!$('p_destinatario').value) $('p_destinatario').value = DEST;
+  if (!$('p_destinatario_piva').value) $('p_destinatario_piva').value = PIVA;
 }
 
 $('btnProf').onclick = async () => {
@@ -187,17 +198,26 @@ async function caricaViaggi() {
 }
 $('mese').onchange = caricaViaggi;
 
-function numerati() { let c = 0; return V.map(v => ({ ...v, nt: v.trasferta ? ++c : '' })); }
+function giorniTrasferta() { return new Set(V.filter(v => v.trasferta).map(v => v.data)); }
+
+function numerati() {
+  const gt = giorniTrasferta(), nr = {};
+  let c = 0;
+  return V.map((v, i) => {
+    if (gt.has(v.data) && !(v.data in nr)) nr[v.data] = ++c;
+    return { ...v, nt: gt.has(v.data) ? nr[v.data] : '', primo: i > 0 && V[i - 1].data !== v.data };
+  });
+}
 
 function totali() {
   const s = k => V.reduce((a, v) => a + num(v[k]), 0);
-  const nT = V.filter(v => v.trasferta).length, km = s('km'), pr = s('pranzo'), tp = s('telepass'), al = s('altre');
+  const nT = giorniTrasferta().size, km = s('km'), pr = s('pranzo'), tp = s('telepass'), al = s('altre');
   const eT = nT * num($('p_tariffa_trasferta').value), eK = km * num($('p_tariffa_km').value);
   return { nT, km, pr, tp, al, eT, eK, sp: pr + tp + al, tot: eT + eK + pr + tp + al };
 }
 
 function render() {
-  $('righe').innerHTML = numerati().map(v => `<tr>
+  $('righe').innerHTML = numerati().map(v => `<tr class="${v.primo ? 'primo' : ''}">
     <td>${v.nt}</td><td>${dIt(v.data)}</td><td>${esc(v.cliente)}</td>
     <td>${esc(v.comune)}${v.provincia ? ' (' + esc(v.provincia) + ')' : ''}</td><td>${v.auto}</td>
     <td class="n">${Math.round(num(v.km))}</td><td class="n">${eur(v.pranzo)}</td>
@@ -212,21 +232,28 @@ function render() {
   $('s_tot').textContent = eur(t.tot);
 }
 
-function resetForm() {
-  editId = null;
-  $('f_data').value = oggi();
+function svuotaCliente() {
   ['f_cli','f_com','f_prov'].forEach(k => $(k).value = '');
   ['f_km','f_pr','f_tp','f_al'].forEach(k => $(k).value = '');
-  $('f_auto').value = '1';
-  $('f_tras').checked = false;
-  $('fTitolo').textContent = 'Aggiungi viaggio';
-  $('btnAdd').textContent = 'Aggiungi';
-  $('btnAnnulla').classList.add('hide');
   $('fErr').textContent = '';
+}
+
+function resetForm() {
+  editId = null;
+  svuotaCliente();
+  $('f_data').value = oggi();
+  $('f_auto').value = '1';
+  $('f_tras').checked = V.some(x => x.data === $('f_data').value && x.trasferta);
+  $('fTitolo').textContent = 'Aggiungi cliente visitato';
+  $('btnAnnulla').classList.add('hide');
 }
 $('btnAnnulla').onclick = resetForm;
 
-$('btnAdd').onclick = async () => {
+$('f_data').onchange = () => {
+  if (!editId) $('f_tras').checked = V.some(x => x.data === $('f_data').value && x.trasferta);
+};
+
+async function salva(continua) {
   const v = {
     data: $('f_data').value, cliente: $('f_cli').value.trim(), comune: $('f_com').value.trim(),
     provincia: $('f_prov').value.trim().toUpperCase() || null, auto: +$('f_auto').value,
@@ -235,16 +262,28 @@ $('btnAdd').onclick = async () => {
   };
   if (!v.data || !v.cliente || !v.comune) { $('fErr').textContent = 'Inserisci almeno data, cliente e comune.'; return; }
   if ([v.km, v.pranzo, v.telepass, v.altre].some(x => x < 0)) { $('fErr').textContent = 'Km e importi non possono essere negativi.'; return; }
-  $('btnAdd').disabled = true;
+  $('btnAdd').disabled = $('btnAltro').disabled = true;
   const { error } = editId
     ? await sb.from('viaggi').update(v).eq('id', editId)
     : await sb.from('viaggi').insert(v);
-  $('btnAdd').disabled = false;
+  if (!error) await sb.from('viaggi').update({ trasferta: v.trasferta }).eq('data', v.data);
+  $('btnAdd').disabled = $('btnAltro').disabled = false;
   if (error) { $('fErr').textContent = 'Salvataggio non riuscito: ' + error.message; return; }
   if (v.data.slice(0, 7) !== $('mese').value) $('mese').value = v.data.slice(0, 7);
-  resetForm();
-  caricaViaggi();
-};
+  if (continua) {
+    editId = null;
+    svuotaCliente();
+    $('fTitolo').textContent = 'Altro cliente, stessa giornata (' + dIt(v.data) + ')';
+    $('btnAnnulla').classList.add('hide');
+    $('f_cli').focus();
+  } else {
+    resetForm();
+  }
+  await caricaViaggi();
+  if (!continua) $('f_tras').checked = V.some(x => x.data === $('f_data').value && x.trasferta);
+}
+$('btnAdd').onclick = () => salva(false);
+$('btnAltro').onclick = () => salva(true);
 
 window.modifica = id => {
   const v = V.find(x => x.id === id); if (!v) return;
@@ -253,14 +292,13 @@ window.modifica = id => {
   $('f_prov').value = v.provincia || ''; $('f_auto').value = String(v.auto);
   $('f_km').value = v.km; $('f_pr').value = v.pranzo; $('f_tp').value = v.telepass; $('f_al').value = v.altre;
   $('f_tras').checked = v.trasferta;
-  $('fTitolo').textContent = 'Modifica viaggio';
-  $('btnAdd').textContent = 'Salva modifica';
+  $('fTitolo').textContent = 'Modifica cliente visitato';
   $('btnAnnulla').classList.remove('hide');
   $('fTitolo').scrollIntoView({ behavior: 'smooth' });
 };
 
 window.elimina = async id => {
-  if (!confirm('Eliminare questo viaggio?')) return;
+  if (!confirm('Eliminare questa riga?')) return;
   const { error } = await sb.from('viaggi').delete().eq('id', id);
   if (error) { $('stato').textContent = 'Eliminazione non riuscita: ' + error.message; return; }
   if (editId === id) resetForm();
@@ -280,22 +318,27 @@ $('btnPdf').onclick = () => {
    ['Codice fiscale', $('p_codice_fiscale').value], ['Auto 1', $('p_auto1').value], ['Auto 2', $('p_auto2').value]]
   .forEach(([k, v]) => { d.setFont(undefined, 'bold'); d.text(k + ':', 14, y); d.setFont(undefined, 'normal'); d.text(v || '', 52, y); y += 5.5; });
   d.setFont(undefined, 'bold'); d.text('Spett.', 190, 15);
-  d.setFont(undefined, 'normal'); d.text(d.splitTextToSize($('p_destinatario').value, 90), 190, 20.5);
+  d.setFont(undefined, 'normal');
+  const righeDest = d.splitTextToSize($('p_destinatario').value, 90);
+  d.text(righeDest, 190, 20.5);
+  if ($('p_destinatario_piva').value) d.text('P.I. / C.F. ' + $('p_destinatario_piva').value, 190, 20.5 + righeDest.length * 5);
   d.setFontSize(14); d.setFont(undefined, 'bold');
   d.text('Missioni mese di ' + ml, 148.5, y + 5, { align: 'center' });
   d.setFont(undefined, 'normal');
   const t = totali();
   const stile = { styles: { fontSize: 9 }, headStyles: { fillColor: [60,60,60] }, footStyles: { fillColor: [230,230,230], textColor: 20 } };
+  const righe = numerati();
   d.autoTable({ ...stile, startY: y + 10,
     head: [['N° tr.','Data','Cliente','Destinazione','Auto','Km','Pranzo','Telepass','Altre spese']],
-    body: numerati().map(v => [v.nt, dIt(v.data), v.cliente, v.comune + (v.provincia ? ' (' + v.provincia + ')' : ''),
+    body: righe.map(v => [v.nt, dIt(v.data), v.cliente, v.comune + (v.provincia ? ' (' + v.provincia + ')' : ''),
       v.auto === 2 ? a2 : a1, Math.round(num(v.km)), eur(v.pranzo), eur(v.telepass), eur(v.altre)]),
     foot: [['','','','','Totale', Math.round(t.km), eur(t.pr), eur(t.tp), eur(t.al)]],
     showFoot: 'lastPage',
+    didDrawCell: c => { if (c.section === 'body' && c.column.index === 0 && righe[c.row.index].primo) { d.setDrawColor(150); d.setLineWidth(0.4); d.line(c.table.settings.margin.left, c.cell.y, d.internal.pageSize.getWidth() - c.table.settings.margin.right, c.cell.y); } },
     columnStyles: { 5: {halign:'right'}, 6: {halign:'right'}, 7: {halign:'right'}, 8: {halign:'right'} } });
   d.autoTable({ ...stile, startY: d.lastAutoTable.finalY + 8, margin: { left: 160 }, tableWidth: 123,
     head: [['Voce','Quantità','Tariffa','Totale']],
-    body: [['Trasferte', t.nT, eur($('p_tariffa_trasferta').value), eur(t.eT)],
+    body: [['Trasferte (giornate)', t.nT, eur($('p_tariffa_trasferta').value), eur(t.eT)],
            ['Rimborso km', Math.round(t.km), eur($('p_tariffa_km').value) + '/km', eur(t.eK)],
            ['Spese varie', '', '', eur(t.sp)]],
     foot: [['Totale da rimborsare', '', '', eur(t.tot)]],
