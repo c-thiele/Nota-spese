@@ -6,7 +6,12 @@
 <title>Note spese</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2b2b2b">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Note spese">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
 *{box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:12px;max-width:900px;color:#222;background:#f6f6f4}
@@ -41,6 +46,7 @@ summary{cursor:pointer;font-weight:600}
 .prev table.riep{width:auto;margin:16px 0 0 auto}
 </style>
 </head>
+  <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})</script>
 <body>
 
 <div id="vLogin" class="card hide">
